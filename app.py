@@ -91,28 +91,35 @@ if st.button("🔄 并发拉取全球数据", type="primary", use_container_widt
                 # 居中高亮显示当前 ERP
                 st.markdown("<h3 style='text-align: center;'>当前股权风险溢价 (ERP)</h3>", unsafe_allow_html=True)
                 
-                # 根据阈值改变 ERP 数值的颜色
+                # 根据阈值动态改变颜色和结论说明
                 if erp > 0.03:
                     erp_color = "#00C853" # 绿色
+                    status_text = "🟢 极度低估：系统处于冰点，风险溢价丰厚，建议全仓/多通道定投。"
                 elif erp > 0:
                     erp_color = "#FFD600" # 黄色
+                    status_text = "🟡 估值合理：处于正常估值中枢，建议保持小额探测性定投。"
                 else:
                     erp_color = "#D50000" # 红色
+                    status_text = "🔴 系统超载：股市预期收益已低于无风险国债，随时有崩盘风险，强制空仓！"
                     
+                # 渲染超大字号的 ERP 数值
                 st.markdown(f"<h1 style='text-align: center; color: {erp_color};'>{erp:.2%}</h1>", unsafe_allow_html=True)
+                
+                # 【新增】在数值正下方插入居中的定性结论
+                st.markdown(f"<p style='text-align: center; font-size: 1.1rem; color: #E0E0E0;'>{status_text}</p>", unsafe_allow_html=True)
                 
                 st.markdown("---")
                 
-                # 【新增】算法释义与阈值说明卡片 (使用 st.info 提供柔和的背景色)
+                # 算法释义与阈值说明卡片
                 st.info("""
                 **📐 核心算法释义：股权风险溢价 (ERP)**
                 * **计算公式**：`ERP = (1 / 纳指PE) - 10年期美债收益率`。
                 * **物理意义**：衡量“冒着本金亏损的风险买入股市，比闭着眼存无风险美债，能多赚多少收益率补偿”。
                 
                 **🚦 系统运行状态参考阈值**：
-                * 🟢 **ERP > 3% (极度低估)**：安全边际极高，属于“黄金坑”。【执行指令】：开启多通道并联，满载定投。
-                * 🟡 **0% < ERP ≤ 3% (合理/微热)**：估值处于中枢或轻微透支。【执行指令】：维持单日极小额（如200元）探测性定投。
-                * 🔴 **ERP ≤ 0% (系统超载)**：买股票的预期收益已**低于**无风险国债，系统处于非理性超频状态。【执行指令】：强制切断资金流入，空仓死等！
+                * 🟢 **ERP > 3%**：黄金坑。
+                * 🟡 **0% < ERP ≤ 3%**：正常波动区。
+                * 🔴 **ERP ≤ 0%**：极度泡沫区。
                 """)
                     
             with tab2:
