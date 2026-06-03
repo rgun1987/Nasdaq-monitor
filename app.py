@@ -81,7 +81,7 @@ if st.button("🔄 并发拉取全球数据", type="primary", use_container_widt
             # 使用 Tabs 隔离 UI，适配手机屏幕
             tab1, tab2 = st.tabs(["🚦 宏观风控 (ERP)", "📈 底层资产看板"])
             
-with tab1:
+            with tab1:
                 # 核心指标双排显示
                 col1, col2 = st.columns(2)
                 # 明确标注这是纳指100的PE
