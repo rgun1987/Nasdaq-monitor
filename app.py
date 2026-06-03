@@ -2,43 +2,48 @@ import streamlit as st
 import yfinance as yf
 import requests
 
-# 优化手机端排版
 st.set_page_config(page_title="纳指风控探头", page_icon="📊", layout="centered")
 
 st.title("📊 纳指 100 终极估值审计")
 st.caption("数据源：联网实时同步 | 纠错优先，定量风控")
 st.markdown("---")
 
+# 引入缓存机制：TTL=3600表示缓存1小时（3600秒）。1小时内重复点击不会触发真实网络请求，直接返回本地内存数据。
+@st.cache_data(ttl=3600, show_spinner=False)
 def get_live_data():
     try:
-        # 1. 抓取10年期美债收益率
-        tnx = yf.Ticker("^TNX")
+        # 1. 构建伪装的浏览器会话通道
+        session = requests.Session()
+        session.headers.update({
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "*/*",
+            "Accept-Encoding": "gzip, deflate, br",
+            "Connection": "keep-alive"
+        })
+
+        # 2. 抓取10年期美债收益率 (强制使用伪装 session)
+        tnx = yf.Ticker("^TNX", session=session)
         us10y_raw = tnx.info.get('previousClose', None)
+        
         if us10y_raw is None:
-            # 备用方案：若yfinance限流，调用公开备用接口
-            us10y_raw = yf.Ticker("IEF").info.get('yield', 4.5) * 100
+            us10y_raw = yf.Ticker("IEF", session=session).info.get('yield', 4.5) * 100
         us10y = us10y_raw / 100
         
-        # 2. 抓取国内纳指100场内最大ETF(513100)的最新实时PE
-        # 利用新浪财经公开接口抓取实时净值与基础估值
-        url = "http://hq.sinajs.cn/list=sz159941"  # 广发纳指100ETF作为锚定
-        headers = {"Referer": "https://finance.sina.com.cn"}
-        res = requests.get(url, headers=headers, timeout=5)
-        
-        # 3. 此处使用 QQQ 作为全球统一的科技股 PE 审计基准，避免场内溢价失真
-        qqq = yf.Ticker("QQQ")
+        # 3. 抓取纳指标杆 QQQ 的动态市盈率
+        qqq = yf.Ticker("QQQ", session=session)
         pe_ratio = qqq.info.get('trailingPE', 33.5)
         
         return pe_ratio, us10y
+        
     except Exception as e:
-        st.error(f"网络网关连接超时: {e}")
-        return None, None
+        return None, str(e)
 
 if st.button("🔄 一键联网审计系统状态", type="primary", use_container_width=True):
     with st.spinner("正在穿透跨境网络，解析核心指标..."):
+        # 调用自带缓存的获取函数
         pe, us10y = get_live_data()
         
-        if pe and us10y:
+        if pe is not None and isinstance(us10y, float):
             earnings_yield = 1 / pe
             erp = earnings_yield - us10y
             
@@ -54,6 +59,10 @@ if st.button("🔄 一键联网审计系统状态", type="primary", use_containe
             if erp > 0.03:
                 st.success("🟢 🟢 🟢 绿灯状态：系统处于极度冰点，风险溢价丰厚。策略：允许开启多通道并联建仓。")
             elif erp > 0:
-                st.warning("🟡 黄灯状态：估值处于合理中枢。策略：建议保持单日200元极小额探测性定投。")
+                st.warning("🟡 黄灯状态：估值处于合理中枢。策略：建议保持单日极小额探测性定投。")
             else:
                 st.error("🔴 🔴 🔴 红灯警报！风险溢价为负，系统严重超频。策略：切断所有资金流入，捂紧口袋死等！")
+        else:
+            # 捕获并输出底层的伪装失败或超时报错
+            st.error(f"网关穿透失败，远端接口拒绝响应。底层反馈: {us10y}")
+            st.info("提示：云端 IP 池可能处于重度封锁期。请等待 1 小时后重试，或联系运维人员更换数据源。")
