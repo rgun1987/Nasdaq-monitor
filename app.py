@@ -68,31 +68,30 @@ def get_qqq_pe():
 
 @st.cache_data(ttl=3600, show_spinner=False) # 期权数据重负载，缓存 1 小时
 def fetch_options_risk(ticker="QQQ"):
-    """抓取期权微观结构：寻找做市商的 Put Wall 和交割日"""
+    """抓取期权微观结构，带深度异常捕获机制"""
     try:
         tk = yf.Ticker(ticker)
-        dates = tk.options  # 获取所有交割日
+        dates = tk.options
         
         if not dates:
-            return None, "暂无数据", "缺乏交割日"
+            # 捕获空数据
+            return None, "数据阻断", "雅虎未返回交割日列表 (可能触发反爬或代码失效)"
 
-        # 锁定最近的一个交割日 (OpEx Node)
         target_date = dates[0] 
         chain = tk.option_chain(target_date)
         puts = chain.puts
         
-        # 核心算法：寻找未平仓合约 (OI) 最大的看跌期权行权价 -> 负 Gamma 墙
         if puts.empty or 'openInterest' not in puts.columns:
-            return None, target_date, "OI数据丢失"
+            return None, target_date, "OI字段丢失或表单为空"
             
         max_oi_idx = puts['openInterest'].idxmax()
-        put_wall_strike = puts.loc[max_oi_idx, 'strike']
-        put_wall_oi = puts.loc[max_oi_idx, 'openInterest']
+        put_wall_strike = float(puts.loc[max_oi_idx, 'strike'])
         
-        return put_wall_strike, target_date, put_wall_oi
+        return put_wall_strike, target_date, "Success"
 
     except Exception as e:
-        return None, "获取失败", str(e)
+        # 将最底层的真实报错抓取出来
+        return None, "API 熔断", f"底层异常日志: {str(e)}"
 
 # ==========================================
 # 3. 前端 UI 渲染与逻辑判定
@@ -140,6 +139,7 @@ if st.button("🔄 启动双核审计扫描", type="primary", use_container_widt
                 # 【模块 B：微观期权结构探头 (防负 Gamma 踩踏)】
                 st.markdown("### 🕸️ 期权微观结构 (负 Gamma 监控)")
                 
+                # 重新映射返回值：put_oi 变量现在承载的是具体的报错信息 (error_log)
                 if put_wall is not None:
                     distance = ((qqq_px - put_wall) / qqq_px) * 100
                     
@@ -149,7 +149,10 @@ if st.button("🔄 启动双核审计扫描", type="primary", use_container_widt
                     
                     st.warning(f"**微观审计结论**：当前 QQQ 价格为 **${qqq_px:.2f}**。如果跌破 Put Wall **${put_wall:.2f}**，将触发期权做市商的强制砸盘（负 Gamma 死亡螺旋）。该踩踏危机大概率需等待 **{opex_date}** 交割日结算后方可解除。期间绝对禁止抢反弹。")
                 else:
-                    st.error(f"期权数据拉取受阻。底层反馈: {opex_date}")
+                    # 触发降级机制：直接将底层的 Python 报错信息打印在屏幕上
+                    st.warning(f"⚠️ **微观探头离线**：期权数据通道被雅虎防火墙物理切断。")
+                    st.code(f"状态: {opex_date}\n{put_oi}", language="bash")
+                    st.caption("*系统注：期权微观通道阻断不影响上方核心 ERP 宏观指标的测算。请依赖 ERP 指标进行定投决策。")
                 
                 st.markdown("---")
                 
